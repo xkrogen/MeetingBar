@@ -1330,15 +1330,13 @@ final class MenuBuilderQuickActionsTests: BaseTestCase {
 final class StatusBarTitleRendererTests: BaseTestCase {
 
     func test_stackedTitleUsesCenteredTemplateImage() {
-        let title = StatusBarTitleRenderer.attributedTitle(
+        let image = StatusBarTitleRenderer.stackedTitleImage(
             for: makePresentation(layout: .stacked)
         )
 
-        let attachment =
-            title.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment
-        XCTAssertTrue(attachment?.image?.isTemplate ?? false)
-        XCTAssertGreaterThan(attachment?.image?.size.width ?? 0, 0)
-        XCTAssertGreaterThan(attachment?.image?.size.height ?? 0, 0)
+        XCTAssertTrue(image.isTemplate)
+        XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertGreaterThan(image.size.height, 0)
     }
 
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {

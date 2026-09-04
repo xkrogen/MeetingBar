@@ -48,6 +48,7 @@ struct StatusBarDependencies {
 final class StatusBarItemController {
     var statusItem: NSStatusItem!
     var statusItemMenu: NSMenu!
+    private var stackedTitleItem: NSStatusItem?
 
     /// Current event list, driven by the AppModel state.
     /// A non-nil `_eventsOverride` takes precedence (used by tests to inject
@@ -237,12 +238,44 @@ final class StatusBarItemController {
         }
         button.imagePosition = button.image?.name() == "no_online_session" ? .noImage : .imageLeft
 
-        if presentation.mode == .nextEvent {
+        if presentation.mode == .nextEvent, presentation.layout == .stacked {
+            renderStackedTitle(presentation)
+            button.toolTip = presentation.tooltip
+        } else {
+            removeStackedTitle()
+        }
+
+        if presentation.mode == .nextEvent, presentation.layout != .stacked {
             button.attributedTitle = StatusBarTitleRenderer.attributedTitle(for: presentation)
             button.toolTip = presentation.tooltip
         }
 
-        ensureStatusBarButtonIsVisible(button)
+        if presentation.layout != .stacked {
+            ensureStatusBarButtonIsVisible(button)
+        }
+    }
+
+    private func renderStackedTitle(_ presentation: StatusBarPresentation) {
+        let titleItem = stackedTitleItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        stackedTitleItem = titleItem
+
+        guard let button = titleItem.button else { return }
+        button.target = self
+        button.action = #selector(statusMenuBarAction)
+        button.sendAction(on: [
+            NSEvent.EventTypeMask.rightMouseDown, NSEvent.EventTypeMask.leftMouseUp,
+            NSEvent.EventTypeMask.leftMouseDown
+        ])
+        button.image = StatusBarTitleRenderer.stackedTitleImage(for: presentation)
+        button.imagePosition = .imageOnly
+        button.toolTip = presentation.tooltip
+        button.setAccessibilityLabel("\(presentation.title) \(presentation.time)")
+    }
+
+    private func removeStackedTitle() {
+        guard let stackedTitleItem else { return }
+        NSStatusBar.system.removeStatusItem(stackedTitleItem)
+        self.stackedTitleItem = nil
     }
 
     private func ensureStatusBarButtonIsVisible(_ button: NSStatusBarButton) {
@@ -521,18 +554,11 @@ enum StatusBarTitleRenderer {
                 )
             )
         case .stacked:
-            return stackedTitle(for: presentation)
+            return NSAttributedString(string: "")
         }
     }
 
-    private static func stackedTitle(for presentation: StatusBarPresentation) -> NSAttributedString {
-        let attachment = NSTextAttachment()
-        attachment.image = stackedTitleImage(for: presentation)
-        attachment.bounds = NSRect(origin: .zero, size: attachment.image?.size ?? .zero)
-        return NSAttributedString(attachment: attachment)
-    }
-
-    private static func stackedTitleImage(for presentation: StatusBarPresentation) -> NSImage {
+    static func stackedTitleImage(for presentation: StatusBarPresentation) -> NSImage {
         let title = NSAttributedString(
             string: presentation.title,
             attributes: templateAttributes(
