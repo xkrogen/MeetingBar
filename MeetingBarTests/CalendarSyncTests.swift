@@ -59,6 +59,16 @@ class CalendarSyncTests: BaseTestCase {
         wait(for: [calExpectation, evtExpectation], timeout: 1.0)
     }
 
+    func testStartupConfigurationSignsInActiveProvider() async {
+        let store = FakeEventStore()
+        let repository = CalendarRepository(providerName: .macOSEventKit) { _ in store }
+        let manager = CalendarSync(repository: repository, refreshInterval: 0)
+
+        let isReady = await manager.configureProvider(.macOSEventKit)
+        XCTAssertTrue(isReady)
+        XCTAssertEqual(store.signInCallCount, 1)
+    }
+
     func testRefreshPreservesSelectedSharedGoogleCalendars() async throws {
         let primary = MBCalendar(
             title: "Primary", id: "primary", source: nil, email: nil, color: .black)

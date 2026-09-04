@@ -57,9 +57,11 @@ public class CalendarSync: ObservableObject {
         self.refreshInterval = refreshInterval
         AppSettings.migrateSelectedCalendarsByProviderIfNeeded()
         repository = CalendarRepository(providerName: Defaults[.eventStoreProvider])
-        await configureProvider(Defaults[.eventStoreProvider])
+        let providerIsReady = await configureProvider(Defaults[.eventStoreProvider])
         setupPublishers()
-        refreshSubject.send() // initial load
+        if providerIsReady {
+            refreshSubject.send() // initial load
+        }
     }
 
     public func changeEventStoreProvider(
@@ -113,8 +115,25 @@ public class CalendarSync: ObservableObject {
         return .failed(error.localizedDescription)
     }
 
-    private func configureProvider(_ providerName: EventStoreProvider) async {
+    func configureProvider(_: EventStoreProvider) async -> Bool {
+        do {
+            try await repository.signIn()
+        } catch {
+            let attempted = Date()
+            let errorDescription = String(describing: error)
+            MeetingBarLogger.calendar.error(
+                "Provider sign-in during startup failed: \(errorDescription, privacy: .private)"
+            )
+            providerHealth = ProviderHealth.failure(
+                previous: providerHealth,
+                attempted: attempted,
+                error: error
+            )
+            subscribeToRepositoryStoreChanges()
+            return false
+        }
         subscribeToRepositoryStoreChanges()
+        return true
     }
 
     private func subscribeToRepositoryStoreChanges() {
