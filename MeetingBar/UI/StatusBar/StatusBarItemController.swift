@@ -48,6 +48,7 @@ struct StatusBarDependencies {
 final class StatusBarItemController {
     var statusItem: NSStatusItem!
     var statusItemMenu: NSMenu!
+    private let stackedTitleView = StatusBarStackedTitleView()
 
     /// Current event list, driven by the AppModel state.
     /// A non-nil `_eventsOverride` takes precedence (used by tests to inject
@@ -82,6 +83,9 @@ final class StatusBarItemController {
         statusItem.button?.image = MenuStyleConstants.iconNamed(MenuStyleConstants.appIconName)
         statusItem.button?.image?.size = MenuStyleConstants.iconSize
         statusItem.button?.imagePosition = .imageLeft
+        statusItem.button?.addSubview(stackedTitleView)
+        stackedTitleView.autoresizingMask = [.width, .height]
+        stackedTitleView.isHidden = true
         let menuItem = statusItemMenu.addItem(
             withTitle: "window_title_onboarding".loco(), action: nil, keyEquivalent: "")
         menuItem.isEnabled = false
@@ -225,6 +229,7 @@ final class StatusBarItemController {
         button.toolTip = nil
         button.alignment = .center
         button.cell?.lineBreakMode = .byTruncatingTail
+        stackedTitleView.isHidden = true
 
         switch presentation.icon {
         case .asset(let name):
@@ -238,11 +243,32 @@ final class StatusBarItemController {
         button.imagePosition = button.image?.name() == "no_online_session" ? .noImage : .imageLeft
 
         if presentation.mode == .nextEvent {
-            button.attributedTitle = StatusBarTitleRenderer.attributedTitle(for: presentation)
+            if presentation.layout == .stacked {
+                button.attributedTitle = StatusBarTitleRenderer.sizingTitle(for: presentation)
+                layoutStackedTitleView(in: button, presentation: presentation)
+            } else {
+                button.attributedTitle = StatusBarTitleRenderer.attributedTitle(for: presentation)
+            }
             button.toolTip = presentation.tooltip
         }
 
         ensureStatusBarButtonIsVisible(button)
+    }
+
+    private func layoutStackedTitleView(
+        in button: NSStatusBarButton,
+        presentation: StatusBarPresentation
+    ) {
+        button.layoutSubtreeIfNeeded()
+        let titleRect = button.cell?.titleRect(forBounds: button.bounds) ?? button.bounds
+        stackedTitleView.frame = NSRect(
+            x: titleRect.minX,
+            y: button.bounds.minY,
+            width: titleRect.width,
+            height: button.bounds.height
+        )
+        stackedTitleView.presentation = presentation
+        stackedTitleView.isHidden = false
     }
 
     private func ensureStatusBarButtonIsVisible(_ button: NSStatusBarButton) {
@@ -525,13 +551,22 @@ enum StatusBarTitleRenderer {
         }
     }
 
+    static func sizingTitle(for presentation: StatusBarPresentation) -> NSAttributedString {
+        let title = NSMutableAttributedString(attributedString: stackedTitle(for: presentation))
+        title.addAttribute(
+            .foregroundColor,
+            value: NSColor.clear,
+            range: NSRange(location: 0, length: title.length)
+        )
+        return title
+    }
+
     private static func stackedTitle(for presentation: StatusBarPresentation) -> NSAttributedString {
         let title = NSMutableAttributedString(
             string: presentation.title,
             attributes: titleAttributes(
                 style: presentation.titleStyle,
-                font: NSFont.systemFont(ofSize: 12),
-                baselineOffset: -3
+                font: NSFont.systemFont(ofSize: 12)
             )
         )
         title.append(
@@ -553,17 +588,13 @@ enum StatusBarTitleRenderer {
         return title
     }
 
-    private static func titleAttributes(
+    static func titleAttributes(
         style: StatusBarTitleStyle,
-        font: NSFont,
-        baselineOffset: CGFloat? = nil
+        font: NSFont
     ) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font
         ]
-        if let baselineOffset {
-            attributes[.baselineOffset] = baselineOffset
-        }
         switch style {
         case .normal:
             break
@@ -576,6 +607,77 @@ enum StatusBarTitleRenderer {
                 | NSUnderlineStyle.byWord.rawValue
         }
         return attributes
+    }
+}
+
+@MainActor
+private final class StatusBarStackedTitleView: NSView {
+    var presentation: StatusBarPresentation? {
+        didSet { needsDisplay = true }
+    }
+
+    override func hitTest(_: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func draw(_: NSRect) {
+        guard let presentation else { return }
+
+        let title = NSAttributedString(
+            string: presentation.title,
+            attributes: StatusBarTitleRenderer.titleAttributes(
+                style: presentation.titleStyle,
+                font: NSFont.systemFont(ofSize: 12)
+            )
+        )
+        let time = NSAttributedString(
+            string: presentation.time,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 9),
+                .foregroundColor: NSColor.lightGray
+            ]
+        )
+        StatusBarStackedTitleLayout.draw(
+            title: title,
+            time: time,
+            in: bounds,
+            context: NSGraphicsContext.current
+        )
+    }
+}
+
+@MainActor
+private enum StatusBarStackedTitleLayout {
+    static func draw(
+        title: NSAttributedString,
+        time: NSAttributedString,
+        in bounds: NSRect,
+        context: NSGraphicsContext?
+    ) {
+        guard let context else { return }
+
+        let titleLine = CTLineCreateWithAttributedString(title)
+        let timeLine = CTLineCreateWithAttributedString(time)
+        let titleBounds = CTLineGetBoundsWithOptions(titleLine, .useGlyphPathBounds)
+        let timeBounds = CTLineGetBoundsWithOptions(timeLine, .useGlyphPathBounds)
+        let titleWidth = CTLineGetTypographicBounds(titleLine, nil, nil, nil)
+        let timeWidth = CTLineGetTypographicBounds(timeLine, nil, nil, nil)
+
+        let titleBaseline = timeBounds.maxY - titleBounds.minY
+        let contentBounds = timeBounds.union(titleBounds.offsetBy(dx: 0, dy: titleBaseline))
+        let verticalOffset = bounds.midY - contentBounds.midY
+
+        context.cgContext.textPosition = CGPoint(
+            x: bounds.midX - titleWidth / 2,
+            y: verticalOffset + titleBaseline
+        )
+        CTLineDraw(titleLine, context.cgContext)
+
+        context.cgContext.textPosition = CGPoint(
+            x: bounds.midX - timeWidth / 2,
+            y: verticalOffset
+        )
+        CTLineDraw(timeLine, context.cgContext)
     }
 }
 

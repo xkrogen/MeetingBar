@@ -1354,6 +1354,7 @@ final class StatusBarTitleRendererTests: BaseTestCase {
             ) as? NSFont
         XCTAssertEqual(titleFont?.pointSize ?? 0, 12, accuracy: 0.001)
         XCTAssertEqual(timeFont?.pointSize ?? 0, 9, accuracy: 0.001)
+        XCTAssertNil(title.attribute(.baselineOffset, at: 0, effectiveRange: nil))
     }
 
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {
