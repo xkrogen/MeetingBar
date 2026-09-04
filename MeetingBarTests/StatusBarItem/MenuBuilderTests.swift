@@ -1357,6 +1357,15 @@ final class StatusBarTitleRendererTests: BaseTestCase {
         XCTAssertNil(title.attribute(.baselineOffset, at: 0, effectiveRange: nil))
     }
 
+    func test_stackedStatusBarTitleUsesMenuBarForegroundColor() {
+        let attributes = StatusBarTitleRenderer.statusBarTitleAttributes(
+            style: .normal,
+            font: NSFont.systemFont(ofSize: 12)
+        )
+
+        XCTAssertEqual(attributes[.foregroundColor] as? NSColor, .white)
+    }
+
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {
         let title = StatusBarTitleRenderer.attributedTitle(
             for: makePresentation(

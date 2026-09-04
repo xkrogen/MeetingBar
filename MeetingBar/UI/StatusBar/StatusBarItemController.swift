@@ -608,6 +608,17 @@ enum StatusBarTitleRenderer {
         }
         return attributes
     }
+
+    static func statusBarTitleAttributes(
+        style: StatusBarTitleStyle,
+        font: NSFont
+    ) -> [NSAttributedString.Key: Any] {
+        var attributes = titleAttributes(style: style, font: font)
+        attributes[.foregroundColor] = style == .inactive
+            ? NSColor.white.withAlphaComponent(0.55)
+            : NSColor.white
+        return attributes
+    }
 }
 
 @MainActor
@@ -625,7 +636,7 @@ private final class StatusBarStackedTitleView: NSView {
 
         let title = NSAttributedString(
             string: presentation.title,
-            attributes: StatusBarTitleRenderer.titleAttributes(
+            attributes: StatusBarTitleRenderer.statusBarTitleAttributes(
                 style: presentation.titleStyle,
                 font: NSFont.systemFont(ofSize: 12)
             )
