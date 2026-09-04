@@ -1329,41 +1329,16 @@ final class MenuBuilderQuickActionsTests: BaseTestCase {
 @MainActor
 final class StatusBarTitleRendererTests: BaseTestCase {
 
-    func test_stackedTitleCentersBothLinesAndUsesCompactFonts() {
+    func test_stackedTitleUsesCenteredTemplateImage() {
         let title = StatusBarTitleRenderer.attributedTitle(
             for: makePresentation(layout: .stacked)
         )
 
-        XCTAssertEqual(title.string, "Weekly sync\nnow")
-
-        let paragraphStyle =
-            title.attribute(
-                .paragraphStyle,
-                at: 0,
-                effectiveRange: nil
-            ) as? NSParagraphStyle
-        XCTAssertEqual(paragraphStyle?.alignment, .center)
-        XCTAssertEqual(paragraphStyle?.lineHeightMultiple ?? 0, 0.7, accuracy: 0.001)
-
-        let titleFont = title.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        let timeFont =
-            title.attribute(
-                .font,
-                at: title.length - 1,
-                effectiveRange: nil
-            ) as? NSFont
-        XCTAssertEqual(titleFont?.pointSize ?? 0, 12, accuracy: 0.001)
-        XCTAssertEqual(timeFont?.pointSize ?? 0, 9, accuracy: 0.001)
-        XCTAssertNil(title.attribute(.baselineOffset, at: 0, effectiveRange: nil))
-    }
-
-    func test_stackedStatusBarTitleUsesMenuBarForegroundColor() {
-        let attributes = StatusBarTitleRenderer.statusBarTitleAttributes(
-            style: .normal,
-            font: NSFont.systemFont(ofSize: 12)
-        )
-
-        XCTAssertEqual(attributes[.foregroundColor] as? NSColor, .white)
+        let attachment =
+            title.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment
+        XCTAssertTrue(attachment?.image?.isTemplate ?? false)
+        XCTAssertGreaterThan(attachment?.image?.size.width ?? 0, 0)
+        XCTAssertGreaterThan(attachment?.image?.size.height ?? 0, 0)
     }
 
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {

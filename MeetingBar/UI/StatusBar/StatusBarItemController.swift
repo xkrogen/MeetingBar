@@ -48,7 +48,6 @@ struct StatusBarDependencies {
 final class StatusBarItemController {
     var statusItem: NSStatusItem!
     var statusItemMenu: NSMenu!
-    private let stackedTitleView = StatusBarStackedTitleView()
 
     /// Current event list, driven by the AppModel state.
     /// A non-nil `_eventsOverride` takes precedence (used by tests to inject
@@ -83,9 +82,6 @@ final class StatusBarItemController {
         statusItem.button?.image = MenuStyleConstants.iconNamed(MenuStyleConstants.appIconName)
         statusItem.button?.image?.size = MenuStyleConstants.iconSize
         statusItem.button?.imagePosition = .imageLeft
-        statusItem.button?.addSubview(stackedTitleView)
-        stackedTitleView.autoresizingMask = [.width, .height]
-        stackedTitleView.isHidden = true
         let menuItem = statusItemMenu.addItem(
             withTitle: "window_title_onboarding".loco(), action: nil, keyEquivalent: "")
         menuItem.isEnabled = false
@@ -229,7 +225,6 @@ final class StatusBarItemController {
         button.toolTip = nil
         button.alignment = .center
         button.cell?.lineBreakMode = .byTruncatingTail
-        stackedTitleView.isHidden = true
 
         switch presentation.icon {
         case .asset(let name):
@@ -243,32 +238,11 @@ final class StatusBarItemController {
         button.imagePosition = button.image?.name() == "no_online_session" ? .noImage : .imageLeft
 
         if presentation.mode == .nextEvent {
-            if presentation.layout == .stacked {
-                button.attributedTitle = StatusBarTitleRenderer.sizingTitle(for: presentation)
-                layoutStackedTitleView(in: button, presentation: presentation)
-            } else {
-                button.attributedTitle = StatusBarTitleRenderer.attributedTitle(for: presentation)
-            }
+            button.attributedTitle = StatusBarTitleRenderer.attributedTitle(for: presentation)
             button.toolTip = presentation.tooltip
         }
 
         ensureStatusBarButtonIsVisible(button)
-    }
-
-    private func layoutStackedTitleView(
-        in button: NSStatusBarButton,
-        presentation: StatusBarPresentation
-    ) {
-        button.layoutSubtreeIfNeeded()
-        let titleRect = button.cell?.titleRect(forBounds: button.bounds) ?? button.bounds
-        stackedTitleView.frame = NSRect(
-            x: titleRect.minX,
-            y: button.bounds.minY,
-            width: titleRect.width,
-            height: button.bounds.height
-        )
-        stackedTitleView.presentation = presentation
-        stackedTitleView.isHidden = false
     }
 
     private func ensureStatusBarButtonIsVisible(_ button: NSStatusBarButton) {
@@ -551,44 +525,63 @@ enum StatusBarTitleRenderer {
         }
     }
 
-    static func sizingTitle(for presentation: StatusBarPresentation) -> NSAttributedString {
-        let title = NSMutableAttributedString(attributedString: stackedTitle(for: presentation))
-        title.addAttribute(
-            .foregroundColor,
-            value: NSColor.clear,
-            range: NSRange(location: 0, length: title.length)
-        )
-        return title
+    private static func stackedTitle(for presentation: StatusBarPresentation) -> NSAttributedString {
+        let attachment = NSTextAttachment()
+        attachment.image = stackedTitleImage(for: presentation)
+        attachment.bounds = NSRect(origin: .zero, size: attachment.image?.size ?? .zero)
+        return NSAttributedString(attachment: attachment)
     }
 
-    private static func stackedTitle(for presentation: StatusBarPresentation) -> NSAttributedString {
-        let title = NSMutableAttributedString(
+    private static func stackedTitleImage(for presentation: StatusBarPresentation) -> NSImage {
+        let title = NSAttributedString(
             string: presentation.title,
-            attributes: titleAttributes(
+            attributes: templateAttributes(
                 style: presentation.titleStyle,
                 font: NSFont.systemFont(ofSize: 12)
             )
         )
-        title.append(
-            NSAttributedString(
-                string: "\n" + presentation.time,
-                attributes: [
-                    NSAttributedString.Key.font: NSFont.systemFont(ofSize: 9),
-                    NSAttributedString.Key.foregroundColor: NSColor.lightGray
-                ]
-            ))
-
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineHeightMultiple = 0.7
-        paragraphStyle.alignment = .center
-        title.addAttributes(
-            [NSAttributedString.Key.paragraphStyle: paragraphStyle],
-            range: NSRange(location: 0, length: title.length)
+        let time = NSAttributedString(
+            string: presentation.time,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 9),
+                .foregroundColor: NSColor.black.withAlphaComponent(0.65)
+            ]
         )
-        return title
+        let titleLine = CTLineCreateWithAttributedString(title)
+        let timeLine = CTLineCreateWithAttributedString(time)
+        let titleBounds = CTLineGetBoundsWithOptions(titleLine, .useGlyphPathBounds)
+        let timeBounds = CTLineGetBoundsWithOptions(timeLine, .useGlyphPathBounds)
+        let titleWidth = CTLineGetTypographicBounds(titleLine, nil, nil, nil)
+        let timeWidth = CTLineGetTypographicBounds(timeLine, nil, nil, nil)
+        let titleBaseline = timeBounds.maxY - titleBounds.minY
+        let contentBounds = timeBounds.union(titleBounds.offsetBy(dx: 0, dy: titleBaseline))
+        let image = NSImage(size: NSSize(
+            width: ceil(max(titleWidth, timeWidth)),
+            height: ceil(contentBounds.height)
+        ))
+        image.lockFocus()
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            image.unlockFocus()
+            return image
+        }
+
+        context.textPosition = CGPoint(
+            x: (image.size.width - titleWidth) / 2,
+            y: titleBaseline - contentBounds.minY
+        )
+        CTLineDraw(titleLine, context)
+        context.textPosition = CGPoint(
+            x: (image.size.width - timeWidth) / 2,
+            y: -contentBounds.minY
+        )
+        CTLineDraw(timeLine, context)
+        image.unlockFocus()
+        // AppKit applies the appropriate contrast and inactive-display dimming to template images.
+        image.isTemplate = true
+        return image
     }
 
-    static func titleAttributes(
+    private static func titleAttributes(
         style: StatusBarTitleStyle,
         font: NSFont
     ) -> [NSAttributedString.Key: Any] {
@@ -609,86 +602,15 @@ enum StatusBarTitleRenderer {
         return attributes
     }
 
-    static func statusBarTitleAttributes(
+    private static func templateAttributes(
         style: StatusBarTitleStyle,
         font: NSFont
     ) -> [NSAttributedString.Key: Any] {
         var attributes = titleAttributes(style: style, font: font)
-        attributes[.foregroundColor] = style == .inactive
-            ? NSColor.white.withAlphaComponent(0.55)
-            : NSColor.white
+        attributes[.foregroundColor] = NSColor.black.withAlphaComponent(
+            style == .inactive ? 0.55 : 1
+        )
         return attributes
-    }
-}
-
-@MainActor
-private final class StatusBarStackedTitleView: NSView {
-    var presentation: StatusBarPresentation? {
-        didSet { needsDisplay = true }
-    }
-
-    override func hitTest(_: NSPoint) -> NSView? {
-        nil
-    }
-
-    override func draw(_: NSRect) {
-        guard let presentation else { return }
-
-        let title = NSAttributedString(
-            string: presentation.title,
-            attributes: StatusBarTitleRenderer.statusBarTitleAttributes(
-                style: presentation.titleStyle,
-                font: NSFont.systemFont(ofSize: 12)
-            )
-        )
-        let time = NSAttributedString(
-            string: presentation.time,
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 9),
-                .foregroundColor: NSColor.lightGray
-            ]
-        )
-        StatusBarStackedTitleLayout.draw(
-            title: title,
-            time: time,
-            in: bounds,
-            context: NSGraphicsContext.current
-        )
-    }
-}
-
-@MainActor
-private enum StatusBarStackedTitleLayout {
-    static func draw(
-        title: NSAttributedString,
-        time: NSAttributedString,
-        in bounds: NSRect,
-        context: NSGraphicsContext?
-    ) {
-        guard let context else { return }
-
-        let titleLine = CTLineCreateWithAttributedString(title)
-        let timeLine = CTLineCreateWithAttributedString(time)
-        let titleBounds = CTLineGetBoundsWithOptions(titleLine, .useGlyphPathBounds)
-        let timeBounds = CTLineGetBoundsWithOptions(timeLine, .useGlyphPathBounds)
-        let titleWidth = CTLineGetTypographicBounds(titleLine, nil, nil, nil)
-        let timeWidth = CTLineGetTypographicBounds(timeLine, nil, nil, nil)
-
-        let titleBaseline = timeBounds.maxY - titleBounds.minY
-        let contentBounds = timeBounds.union(titleBounds.offsetBy(dx: 0, dy: titleBaseline))
-        let verticalOffset = bounds.midY - contentBounds.midY
-
-        context.cgContext.textPosition = CGPoint(
-            x: bounds.midX - titleWidth / 2,
-            y: verticalOffset + titleBaseline
-        )
-        CTLineDraw(titleLine, context.cgContext)
-
-        context.cgContext.textPosition = CGPoint(
-            x: bounds.midX - timeWidth / 2,
-            y: verticalOffset
-        )
-        CTLineDraw(timeLine, context.cgContext)
     }
 }
 
