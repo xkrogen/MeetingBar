@@ -1496,26 +1496,56 @@ final class StatusBarItemControllerPresentationTests: BaseTestCase {
         XCTAssertNotNil(button.image)
     }
 
-    func test_updateTitleUsesCenteredStackedTimeUnderTitle() throws {
+    func test_updateTitleUsesNativeTemplateImageForStackedTimeUnderTitle() throws {
         configureStatusBarDefaults()
         Defaults[.eventTimeFormat] = .show_under_title
 
         let controller = StatusBarItemController()
-        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+        defer {
+            controller.renderStatusBar(makePresentation(layout: .inline(showTime: false)))
+            NSStatusBar.system.removeStatusItem(controller.statusItem)
+        }
         controller.events = [makeStatusEvent()]
         controller.updateTitle()
 
-        let button = try XCTUnwrap(controller.statusItem.button)
-        XCTAssertTrue(button.attributedTitle.string.contains("\n"))
+        let titleItem = try XCTUnwrap(controller.stackedTitleItem)
+        let titleButton = try XCTUnwrap(titleItem.button)
+        XCTAssertTrue(titleButton.image?.isTemplate ?? false)
+        XCTAssertEqual(titleButton.imagePosition, .imageOnly)
+        let tooltip = try XCTUnwrap(titleButton.toolTip)
+        XCTAssertTrue(titleButton.accessibilityLabel()?.contains(tooltip) ?? false)
+        XCTAssertTrue(try XCTUnwrap(controller.statusItem.button).attributedTitle.string.isEmpty)
+    }
 
-        let paragraphStyle =
-            button.attributedTitle.attribute(
-                .paragraphStyle,
-                at: 0,
-                effectiveRange: nil
-            ) as? NSParagraphStyle
-        XCTAssertEqual(paragraphStyle?.alignment, .center)
-        XCTAssertEqual(paragraphStyle?.lineHeightMultiple ?? 0, 0.7, accuracy: 0.001)
+    func test_renderStatusBarRemovesStackedTitleWhenUsingInlineLayout() {
+        let controller = StatusBarItemController()
+        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+
+        controller.renderStatusBar(makePresentation(
+            title: "Weekly sync",
+            time: "now",
+            layout: .stacked
+        ))
+        XCTAssertNotNil(controller.stackedTitleItem)
+
+        controller.renderStatusBar(makePresentation(layout: .inline(showTime: false)))
+        XCTAssertNil(controller.stackedTitleItem)
+    }
+
+    func test_renderStatusBarDoesNotLeaveSpaceForMissingStackedIcon() {
+        let controller = StatusBarItemController()
+        defer {
+            controller.renderStatusBar(makePresentation(layout: .inline(showTime: false)))
+            NSStatusBar.system.removeStatusItem(controller.statusItem)
+        }
+
+        controller.renderStatusBar(makePresentation(
+            title: "Weekly sync",
+            time: "now",
+            layout: .stacked
+        ))
+
+        XCTAssertEqual(controller.statusItem.length, 0)
     }
 
     func test_actionsUseInjectedAppActionSender() {
@@ -1625,13 +1655,14 @@ final class StatusBarItemControllerPresentationTests: BaseTestCase {
     private func makePresentation(
         mode: StatusBarTitleMode = .nextEvent,
         title: String = "",
+        time: String = "",
         icon: StatusBarIcon = .none,
         layout: StatusBarTitleLayout = .none
     ) -> StatusBarPresentation {
         StatusBarPresentation(
             mode: mode,
             title: title,
-            time: "",
+            time: time,
             tooltip: nil,
             icon: icon,
             layout: layout,

@@ -48,7 +48,7 @@ struct StatusBarDependencies {
 final class StatusBarItemController {
     var statusItem: NSStatusItem!
     var statusItemMenu: NSMenu!
-    private var stackedTitleItem: NSStatusItem?
+    private(set) var stackedTitleItem: NSStatusItem?
 
     /// Current event list, driven by the AppModel state.
     /// A non-nil `_eventsOverride` takes precedence (used by tests to inject
@@ -220,6 +220,7 @@ final class StatusBarItemController {
     func renderStatusBar(_ presentation: StatusBarPresentation) {
         guard let button = statusItem.button else { return }
 
+        statusItem.length = NSStatusItem.variableLength
         button.image = nil
         button.title = ""
         button.attributedTitle = NSAttributedString(string: "")
@@ -239,6 +240,9 @@ final class StatusBarItemController {
         button.imagePosition = button.image?.name() == "no_online_session" ? .noImage : .imageLeft
 
         if presentation.mode == .nextEvent, presentation.layout == .stacked {
+            if button.image == nil || button.imagePosition == .noImage {
+                statusItem.length = 0
+            }
             renderStackedTitle(presentation)
             button.toolTip = presentation.tooltip
         } else {
