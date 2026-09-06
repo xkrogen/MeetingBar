@@ -1353,6 +1353,19 @@ final class StatusBarTitleRendererTests: BaseTestCase {
         XCTAssertEqual(deepTitleBaseline - 4 - 7, 1, accuracy: 0.001)
     }
 
+    func test_stackedTitleSubduesBothLinesForInactiveStyle() {
+        XCTAssertEqual(
+            StatusBarTitleRenderer.templateOpacity(for: .inactive, defaultOpacity: 1),
+            0.55,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            StatusBarTitleRenderer.templateOpacity(for: .inactive, defaultOpacity: 0.65),
+            0.55,
+            accuracy: 0.001
+        )
+    }
+
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {
         let title = StatusBarTitleRenderer.attributedTitle(
             for: makePresentation(

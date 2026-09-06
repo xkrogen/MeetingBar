@@ -574,7 +574,9 @@ enum StatusBarTitleRenderer {
             string: presentation.time,
             attributes: [
                 .font: NSFont.systemFont(ofSize: 9),
-                .foregroundColor: NSColor.black.withAlphaComponent(0.65)
+                .foregroundColor: NSColor.black.withAlphaComponent(
+                    templateOpacity(for: presentation.titleStyle, defaultOpacity: 0.65)
+                )
             ]
         )
         let titleLine = CTLineCreateWithAttributedString(title)
@@ -622,6 +624,13 @@ enum StatusBarTitleRenderer {
         timeAscent + titleDescent + 1
     }
 
+    static func templateOpacity(
+        for style: StatusBarTitleStyle,
+        defaultOpacity: CGFloat
+    ) -> CGFloat {
+        style == .inactive ? 0.55 : defaultOpacity
+    }
+
     private static func titleAttributes(
         style: StatusBarTitleStyle,
         font: NSFont
@@ -649,7 +658,7 @@ enum StatusBarTitleRenderer {
     ) -> [NSAttributedString.Key: Any] {
         var attributes = titleAttributes(style: style, font: font)
         attributes[.foregroundColor] = NSColor.black.withAlphaComponent(
-            style == .inactive ? 0.55 : 1
+            templateOpacity(for: style, defaultOpacity: 1)
         )
         return attributes
     }
