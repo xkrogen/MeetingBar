@@ -1329,31 +1329,14 @@ final class MenuBuilderQuickActionsTests: BaseTestCase {
 @MainActor
 final class StatusBarTitleRendererTests: BaseTestCase {
 
-    func test_stackedTitleCentersBothLinesAndUsesCompactFonts() {
-        let title = StatusBarTitleRenderer.attributedTitle(
+    func test_stackedTitleUsesCenteredTemplateImage() {
+        let image = StatusBarTitleRenderer.stackedTitleImage(
             for: makePresentation(layout: .stacked)
         )
 
-        XCTAssertEqual(title.string, "Weekly sync\nnow")
-
-        let paragraphStyle =
-            title.attribute(
-                .paragraphStyle,
-                at: 0,
-                effectiveRange: nil
-            ) as? NSParagraphStyle
-        XCTAssertEqual(paragraphStyle?.alignment, .center)
-        XCTAssertEqual(paragraphStyle?.lineHeightMultiple ?? 0, 0.7, accuracy: 0.001)
-
-        let titleFont = title.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        let timeFont =
-            title.attribute(
-                .font,
-                at: title.length - 1,
-                effectiveRange: nil
-            ) as? NSFont
-        XCTAssertEqual(titleFont?.pointSize ?? 0, 12, accuracy: 0.001)
-        XCTAssertEqual(timeFont?.pointSize ?? 0, 9, accuracy: 0.001)
+        XCTAssertTrue(image.isTemplate)
+        XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertGreaterThan(image.size.height, 0)
     }
 
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {
