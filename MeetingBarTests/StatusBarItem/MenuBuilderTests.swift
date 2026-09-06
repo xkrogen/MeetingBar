@@ -1339,6 +1339,20 @@ final class StatusBarTitleRendererTests: BaseTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
+    func test_stackedTitleMaintainsFixedGapAcrossFontMetrics() {
+        let shallowTitleBaseline = StatusBarTitleRenderer.stackedTitleBaseline(
+            timeAscent: 7,
+            titleDescent: 1
+        )
+        let deepTitleBaseline = StatusBarTitleRenderer.stackedTitleBaseline(
+            timeAscent: 7,
+            titleDescent: 4
+        )
+
+        XCTAssertEqual(shallowTitleBaseline - 1 - 7, 1, accuracy: 0.001)
+        XCTAssertEqual(deepTitleBaseline - 4 - 7, 1, accuracy: 0.001)
+    }
+
     func test_inlineTitleIncludesTimeAndUnderlineStyle() {
         let title = StatusBarTitleRenderer.attributedTitle(
             for: makePresentation(

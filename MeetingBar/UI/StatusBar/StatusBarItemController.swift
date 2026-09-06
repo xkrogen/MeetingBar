@@ -583,7 +583,14 @@ enum StatusBarTitleRenderer {
         let timeBounds = CTLineGetBoundsWithOptions(timeLine, .useGlyphPathBounds)
         let titleWidth = CTLineGetTypographicBounds(titleLine, nil, nil, nil)
         let timeWidth = CTLineGetTypographicBounds(timeLine, nil, nil, nil)
-        let titleBaseline = timeBounds.maxY - titleBounds.minY
+        var timeAscent: CGFloat = 0
+        var titleDescent: CGFloat = 0
+        CTLineGetTypographicBounds(timeLine, &timeAscent, nil, nil)
+        CTLineGetTypographicBounds(titleLine, nil, &titleDescent, nil)
+        let titleBaseline = stackedTitleBaseline(
+            timeAscent: timeAscent,
+            titleDescent: titleDescent
+        )
         let contentBounds = timeBounds.union(titleBounds.offsetBy(dx: 0, dy: titleBaseline))
         let image = NSImage(size: NSSize(
             width: ceil(max(titleWidth, timeWidth)),
@@ -609,6 +616,10 @@ enum StatusBarTitleRenderer {
         // AppKit applies the appropriate contrast and inactive-display dimming to template images.
         image.isTemplate = true
         return image
+    }
+
+    static func stackedTitleBaseline(timeAscent: CGFloat, titleDescent: CGFloat) -> CGFloat {
+        timeAscent + titleDescent + 1
     }
 
     private static func titleAttributes(
